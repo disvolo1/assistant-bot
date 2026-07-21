@@ -7,7 +7,7 @@ Telegram-бот личного ассистента: расписание + на
 
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from telegram import Update
 from telegram.ext import (
@@ -38,6 +38,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Расписание:\n"
         "/add_event 25.07.2026 14:30 Съёмка в студии\n"
         "/schedule — список ближайших событий\n"
+        "/today — что сегодня\n"
+        "/tomorrow — что завтра\n"
         "/del_event <id> — удалить событие\n\n"
         "Поездки:\n"
         "/add_trip Дубай 25.07.2026 30.07.2026 Основная съёмка\n"
@@ -91,6 +93,26 @@ async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
         dt = datetime.strptime(r["event_dt"], "%Y-%m-%d %H:%M")
         lines.append(f"#{r['id']} — {dt.strftime(DT_FMT)} — {r['title']}")
     await update.message.reply_text("\n".join(lines))
+
+
+async def _events_for_day(update: Update, day, label: str):
+    rows = db.list_events_for_date(update.effective_chat.id, day)
+    if not rows:
+        await update.message.reply_text(f"На {label} дел нет.")
+        return
+    lines = [f"Дела на {label} ({day.strftime(D_FMT)}):"]
+    for r in rows:
+        dt = datetime.strptime(r["event_dt"], "%Y-%m-%d %H:%M")
+        lines.append(f"#{r['id']} — {dt.strftime('%H:%M')} — {r['title']}")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _events_for_day(update, datetime.now().date(), "сегодня")
+
+
+async def tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _events_for_day(update, (datetime.now() + timedelta(days=1)).date(), "завтра")
 
 
 async def del_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -256,6 +278,8 @@ def main():
 
     app.add_handler(CommandHandler("add_event", add_event))
     app.add_handler(CommandHandler("schedule", schedule))
+    app.add_handler(CommandHandler("today", today))
+    app.add_handler(CommandHandler("tomorrow", tomorrow))
     app.add_handler(CommandHandler("del_event", del_event))
 
     app.add_handler(CommandHandler("add_trip", add_trip))
